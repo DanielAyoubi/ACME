@@ -139,9 +139,11 @@ class ExperimentPanel(QWidget):
 
         self.table.setRowCount(0)
         self.table.setColumnCount(1 + len(self.controls))
-        headers = ["Hold (min)"] + [
-            f"{name} {control} ({unit})" for name, control, unit in self.controls
-        ]
+        headers = ["Hold (min)"]
+        for name, control, unit in self.controls:
+            if isinstance(unit, list):  # choices instead of a unit, like the valve positions
+                unit = "/".join(str(choice) for choice in unit)
+            headers.append(f"{name} {control} ({unit})")
         self.table.setHorizontalHeaderLabels(headers)
         self.table.resizeColumnsToContents()  # the header names are the widest thing in a column
         self.update_summary()
@@ -223,6 +225,12 @@ class ExperimentPanel(QWidget):
                 raise ValueError(
                     f"Step {row + 1} has a hold time or setpoint that is not a number."
                 )
+            # Catch a mistyped valve position now, not hours into the experiment.
+            for name, control, unit in self.controls:
+                value = setpoints.get((name, control))
+                if isinstance(unit, list) and value is not None and value not in unit:
+                    choices = "/".join(str(choice) for choice in unit)
+                    raise ValueError(f"Step {row + 1}: {name} {control} must be {choices}.")
         return steps
 
     def update_summary(self):
@@ -286,7 +294,9 @@ class ExperimentPanel(QWidget):
         self.highlighted_row = row
 
     def describe(self, step):
-        units = {(name, control): unit for name, control, unit in self.controls}
+        units = {}
+        for name, control, unit in self.controls:
+            units[(name, control)] = "" if isinstance(unit, list) else unit
         parts = [
             f"{name} {control} {value:g} {units.get((name, control), '')}".strip()
             for (name, control), value in step["setpoints"].items()

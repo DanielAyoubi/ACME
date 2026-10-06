@@ -21,6 +21,8 @@ class LivePlot(pg.GraphicsLayoutWidget):
         self.curves = {}
         panels = {}
         for column, unit in units.items():
+            if unit == "":
+                continue  # a reading without a unit, like a valve position, is not plotted
             if unit not in panels:
                 panel = self.addPlot(row=len(panels), col=0, axisItems={"bottom": pg.DateAxisItem()})
                 panel.setLabel("left", unit)

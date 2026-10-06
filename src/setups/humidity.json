@@ -33,6 +33,12 @@
       "type": "julabo_chiller",
       "port": "",
       "baudrate": 9600
+    },
+    {
+      "name": "Valve",
+      "type": "servo_valve",
+      "port": "COM28",
+      "baudrate": 115200
     }
   ],
   "computed_rh": [

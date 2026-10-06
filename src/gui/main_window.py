@@ -162,16 +162,24 @@ class MainWindow(QMainWindow):
         row = 0
         for device in self.setup["devices"]:
             for control, unit in DEVICE_TYPES[device["type"]].controls.items():
-                value_box = QDoubleSpinBox()
-                value_box.setRange(-1000, 10000)
-                value_box.setDecimals(2)
-                value_box.setSingleStep(0.1)
-                value_box.setSuffix(f" {unit}")
                 set_button = QPushButton("Set")
-                # The default arguments freeze this row's device, control and box inside the lambda.
-                set_button.clicked.connect(
-                    lambda checked, name=device["name"], control=control, box=value_box:
-                    self.send(("set", name, control, box.value())))
+                # A list of choices instead of a unit, like the valve positions, gets a drop-down.
+                if isinstance(unit, list):
+                    value_box = QComboBox()
+                    value_box.addItems([str(choice) for choice in unit])
+                    set_button.clicked.connect(
+                        lambda checked, name=device["name"], control=control, box=value_box:
+                        self.send(("set", name, control, float(box.currentText()))))
+                else:
+                    value_box = QDoubleSpinBox()
+                    value_box.setRange(-1000, 10000)
+                    value_box.setDecimals(2)
+                    value_box.setSingleStep(0.1)
+                    value_box.setSuffix(f" {unit}")
+                    # The default arguments freeze this row's device, control and box inside the lambda.
+                    set_button.clicked.connect(
+                        lambda checked, name=device["name"], control=control, box=value_box:
+                        self.send(("set", name, control, box.value())))
                 control_grid.addWidget(QLabel(f"{device['name']} {control}"), row, 0)
                 control_grid.addWidget(value_box, row, 1)
                 control_grid.addWidget(set_button, row, 2)
@@ -321,6 +329,8 @@ class MainWindow(QMainWindow):
         for column, label in self.value_labels.items():
             if row[column] is None:
                 label.setText("–")
+            elif self.units[column] == "":
+                label.setText(f"{row[column]:g}")  # a valve position reads 2, not 2.00
             else:
                 label.setText(f"{row[column]:.2f} {self.units[column]}")
         self.plot.add(row)

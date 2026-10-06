@@ -87,6 +87,7 @@ File → Open from setup catalog. The program reopens the last setup you used.
 | `vaisala_rh` | Vaisala HMP110, Modbus RTU | rh, temperature, dewpoint | – |
 | `dewmaster` | EdgeTech DewMaster, serial | rh, temperature, dewpoint | – |
 | `julabo_chiller` | Julabo chiller, serial | temperature (external probe), setpoint | temperature |
+| `servo_valve` | Swagelok 3-way servo valve, Arduino | position (1/2/3) | position |
 | `firesting_o2` | PyroScience FireSting O₂, legacy firmware | oxygen | – |
 
 ## Adding a new device
@@ -111,6 +112,8 @@ File → Open from setup catalog. The program reopens the last setup you used.
    device catalog above.
 
 The Devices dialog, manual controls, plot, CSV and experiment table then pick it up
-automatically. Readings with a new unit get their own plot panel. A device with an
+automatically. Readings with a new unit get their own plot panel; a reading with the unit `""`
+(like the valve position) is shown and logged but not plotted. A control given a list of choices
+instead of a unit, such as `{"position": [1, 2, 3]}`, gets a drop-down. A device with an
 `address` setting (Modbus) must also accept a `timeout` argument, because the scan passes
 a short one to sweep addresses quickly.

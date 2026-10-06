@@ -37,7 +37,8 @@ def save_summary_plot(csv_path, units):
 
     columns_by_unit = {}
     for column, unit in units.items():
-        columns_by_unit.setdefault(unit, []).append(column)
+        if unit != "":  # a reading without a unit, like a valve position, is not plotted
+            columns_by_unit.setdefault(unit, []).append(column)
 
     times = [datetime.fromisoformat(row["time"]) for row in rows]
     figure = Figure(figsize=(10, 3 * len(columns_by_unit)), layout="constrained")
