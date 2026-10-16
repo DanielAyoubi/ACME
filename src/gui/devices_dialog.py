@@ -3,7 +3,6 @@ import json
 import os
 
 from PyQt6.QtCore import QThread, Qt, pyqtSignal
-from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import (
     QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox, QFileDialog, QFormLayout,
     QHBoxLayout, QHeaderView, QInputDialog, QLabel, QLineEdit, QMessageBox, QProgressDialog,
@@ -14,8 +13,6 @@ from serial.tools import list_ports
 from src.devices import DEVICE_TYPES
 from src.devices.scan import scan
 
-LOGO = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "docs", "logo.png")
-LOGO_HEIGHT = 160
 SETUP_FOLDER = os.path.join("src", "setups")
 
 
@@ -38,17 +35,6 @@ def fill_setup_defaults(setup):
     setup.setdefault("rh_control", {"source": "", "humid_mfc": "", "dry_mfc": "", "target": 50.0,
                                     "total_flow": 2.0, "kp": 1.0, "ki": 0.03, "kd": 0.0})
     return setup
-
-
-def logo_widget(ratio):
-    picture = QPixmap(LOGO)
-    if picture.isNull():
-        return None
-    picture = picture.scaledToHeight(round(LOGO_HEIGHT * ratio), Qt.TransformationMode.SmoothTransformation)
-    picture.setDevicePixelRatio(ratio)
-    logo = QLabel()
-    logo.setPixmap(picture)
-    return logo
 
 
 class ScanWorker(QThread):
@@ -167,13 +153,12 @@ class DevicesDialog(QDialog):
         setup_row.addWidget(new_button)
 
         layout = QVBoxLayout(self)
-        logo = logo_widget(self.devicePixelRatioF())
-        if logo is not None:
-            header = QHBoxLayout()
-            header.addStretch()
-            header.addWidget(logo)
-            header.addStretch()
-            layout.addLayout(header)
+        catalog_title = QLabel(
+            "<span style='font-size: 18pt; font-weight: 700;'>ACME device catalog</span><br>"
+            "<i>Quality instruments for every experiment. Anvils, rockets and giant magnets not yet supported.</i>"
+        )
+        catalog_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(catalog_title)
         layout.addLayout(setup_row)
         layout.addWidget(self.table)
         layout.addLayout(table_buttons)
