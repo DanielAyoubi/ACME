@@ -27,6 +27,12 @@ def data_units(setup):
     return units
 
 
+def rh_columns(setup):
+    # Every RH-like column: a device's "RH" reading, or an RH worked out from a dew point.
+    computed = [entry["name"] for entry in setup["computed_rh"]]
+    return [column for column in data_units(setup) if column.endswith(" RH") or column in computed]
+
+
 class Worker(QThread):
     """The only thread that talks to the hardware, because serial ports are not thread-safe.
 
@@ -68,7 +74,9 @@ class Worker(QThread):
 
         self.steps = []
         self.step_index = 0
-        self.step_end = 0
+        self.step_end = 0  # None while a step waits only for its condition
+        self.condition = None  # (column, target, tolerance) the current step waits for
+        self.settled_since = None  # when the condition's reading last came within tolerance
         self.log_file = None
         self.log_writer = None
         self.log_path = None
@@ -100,7 +108,7 @@ class Worker(QThread):
                 elif command[0] == "rh_control":
                     self.set_rh_control(command[1], command[2])
 
-            if self.steps and time.time() >= self.step_end:
+            if self.steps and self.step_finished():
                 self.next_step()
 
             if time.time() >= next_poll:
@@ -153,6 +161,15 @@ class Worker(QThread):
                 rh = rh_from_dewpoint(dewpoint, temperature)
                 row[entry["name"]] = calibrated_rh(rh) if entry["calibrated"] else rh
 
+        if self.steps and self.condition is not None:
+            column, target, tolerance = self.condition
+            # Leaving the band, or a missing reading, starts the settle time over.
+            if row[column] is None or abs(row[column] - target) > tolerance:
+                self.settled_since = None
+            elif self.settled_since is None:
+                self.settled_since = time.time()
+        row["settled since"] = self.settled_since
+
         self.update_rh_control(row)
 
         self.log_writer.writerow(row)
@@ -197,31 +214,40 @@ class Worker(QThread):
         if on == self.rh_enabled:
             return
         if on:
-            humid = settings["humid_mfc"]
-            dry = settings["dry_mfc"]
+            problem = self.rh_mfc_problem(settings)
             if self.steps:
                 self.message.emit("RH control cannot run during an experiment: the experiment sets the flows.")
             elif settings["source"] not in self.units:
                 self.message.emit("RH control needs an RH reading to follow.")
-            elif humid == dry or humid not in self.devices or dry not in self.devices:
-                self.message.emit("RH control needs two different MFCs.")
-            elif settings["total_flow"] <= 0:
-                self.message.emit("RH control needs a total flow above 0.")
+            elif problem:
+                self.message.emit(problem)
             else:
-                # Start from the share the humid MFC is set to now, so the flows do not jump.
-                share = 50.0
-                setpoint = self.last_row.get(f"{humid} setpoint") if self.last_row else None
-                if setpoint is not None:
-                    share = min(100.0, max(0.0, 100.0 * setpoint / settings["total_flow"]))
-                self.pid = PID(settings["kp"], settings["ki"], settings["kd"], share)
-                self.last_rh_time = 0
-                self.rh_enabled = True
+                self.start_pid()
                 self.message.emit(f"RH control on, holding {settings['target']:g} %.")
         else:
             self.rh_enabled = False
             self.pid = None
             self.message.emit("RH control off. The flows stay where they are.")
         self.rh_control_state.emit(self.rh_enabled)
+
+    def rh_mfc_problem(self, settings):
+        humid = settings["humid_mfc"]
+        dry = settings["dry_mfc"]
+        if humid == dry or humid not in self.devices or dry not in self.devices:
+            return "RH control needs two different MFCs."
+        if settings["total_flow"] <= 0:
+            return "RH control needs a total flow above 0."
+        return None
+
+    def start_pid(self):
+        # Start from the share the humid MFC is set to now, so the flows do not jump.
+        share = 50.0
+        setpoint = self.last_row.get(f"{self.rh['humid_mfc']} setpoint") if self.last_row else None
+        if setpoint is not None:
+            share = min(100.0, max(0.0, 100.0 * setpoint / self.rh["total_flow"]))
+        self.pid = PID(self.rh["kp"], self.rh["ki"], self.rh["kd"], share)
+        self.last_rh_time = 0
+        self.rh_enabled = True
 
     def update_rh_control(self, row):
         if not self.rh_enabled:
@@ -258,6 +284,20 @@ class Worker(QThread):
                 self.last_attempt[name] = time.time()
 
     def start_experiment(self, steps, name=""):
+        # An RH condition runs the RH loop on the MFCs of the RH control box, so check them now,
+        # not hours into the experiment.
+        mfc_flows = [(self.rh["humid_mfc"], "flow"), (self.rh["dry_mfc"], "flow")]
+        rh = rh_columns(self.setup)
+        for number, step in enumerate(steps, start=1):
+            if step["condition"] is None or step["condition"][0] not in rh:
+                continue
+            problem = self.rh_mfc_problem(self.rh)
+            if problem is None and any(key in step["setpoints"] for key in mfc_flows):
+                problem = (f"step {number} sets the flow of {self.rh['humid_mfc']} or {self.rh['dry_mfc']}, "
+                           "which its RH condition controls. Leave those cells empty.")
+            if problem:
+                self.message.emit(f"Cannot start the experiment: {problem}")
+                return
         if self.rh_enabled:
             self.set_rh_control(self.rh, False)
             self.message.emit("RH control switched off: the experiment sets the flows itself.")
@@ -267,6 +307,15 @@ class Worker(QThread):
         self.steps = steps
         self.step_index = -1
         self.step_end = 0  # so the first step starts straight away
+        self.condition = None
+        self.settled_since = None
+
+    def step_finished(self):
+        now = time.time()
+        if self.step_end is not None and now >= self.step_end:
+            return True
+        settle_time = self.setup["conditions"]["settle_minutes"] * 60
+        return self.settled_since is not None and now - self.settled_since >= settle_time
 
     def next_step(self):
         self.step_index += 1
@@ -275,13 +324,45 @@ class Worker(QThread):
             self.stop_experiment("Experiment finished.")
             return
         step = self.steps[self.step_index]
+        # A step that sets the humid or dry flow itself takes them back from the RH loop.
+        if self.rh_enabled and ((self.rh["humid_mfc"], "flow") in step["setpoints"]
+                                or (self.rh["dry_mfc"], "flow") in step["setpoints"]):
+            self.rh_enabled = False
+            self.pid = None
         for (name, control), value in step["setpoints"].items():
             self.set_value(name, control, value)
-        self.step_end = time.time() + step["minutes"] * 60
-        self.message.emit(f"Step {self.step_index + 1}/{len(self.steps)} started, holding {step['minutes']:g} min.")
+        self.step_end = None
+        if step["minutes"] is not None:
+            self.step_end = time.time() + step["minutes"] * 60
+        self.condition = None
+        self.settled_since = None
+
+        text = f"Step {self.step_index + 1}/{len(self.steps)} started"
+        if step["condition"] is None:
+            text += f", holding {step['minutes']:g} min."
+        else:
+            column, target = step["condition"]
+            if column in rh_columns(self.setup):
+                tolerance = self.setup["conditions"]["rh_tolerance"]
+                # The RH loop drives the flows to the target, and keeps holding it in later steps
+                # until one of them sets the flows or another RH target.
+                self.rh = {**self.rh, "source": column, "target": target}
+                if not self.rh_enabled:
+                    self.start_pid()
+            else:
+                tolerance = self.setup["conditions"]["temperature_tolerance"]
+            self.condition = (column, target, tolerance)
+            text += f", waiting for {column} to settle at {target:g}"
+            if step["minutes"] is not None:
+                text += f" (at most {step['minutes']:g} min)"
+            text += "."
+        self.message.emit(text)
 
     def stop_experiment(self, text):
         self.steps = []
+        # The RH loop of an RH condition ends with the experiment. The flows stay where they are.
+        self.rh_enabled = False
+        self.pid = None
         experiment_csv = self.log_path
         self.close_log()
         try:

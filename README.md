@@ -1,6 +1,6 @@
-# ACME controller
+# ACME
 
-[![tests](https://github.com/DanielAyoubi/ACME-controller/actions/workflows/tests.yml/badge.svg)](https://github.com/DanielAyoubi/ACME-controller/actions/workflows/tests.yml)
+[![tests](https://github.com/DanielAyoubi/ACME/actions/workflows/tests.yml/badge.svg)](https://github.com/DanielAyoubi/ACME/actions/workflows/tests.yml)
 
 ACME (Automated Control and Monitoring of Experiments) is an open-source PyQt6 application
 that runs every instrument in an experimental setup from one window. It logs each reading to a
@@ -13,7 +13,8 @@ someone at the bench.
 - **Clean logging and live display.** Every reading goes to one timestamped CSV file and to a
   live plot with one panel per unit.
 - **Unattended, prolonged experiments.** A step table sets the setpoints of any device and holds
-  each step for its time, for as many steps and days as you need. A PNG summary is saved at the end.
+  each step for its time, or until a condition is met, such as the RH settling at 60 %, for as
+  many steps and days as you need. A PNG summary is saved at the end.
 - **Built for long runs.** A device that stops answering is retried every 10 s. When an
   experiment finishes, or the app disconnects or closes, every device returns to its base
   state: MFCs to zero flow, the valve to closed, and so on.
@@ -28,8 +29,8 @@ someone at the bench.
 Needs Python 3.10 or newer. On Windows:
 
 ```
-git clone https://github.com/DanielAyoubi/ACME-controller.git
-cd ACME-controller
+git clone https://github.com/DanielAyoubi/ACME.git
+cd ACME
 python -m venv .venv
 .venv\Scripts\pip install -r requirements.txt
 .venv\Scripts\python main.py
@@ -52,10 +53,23 @@ named like `/dev/ttyUSB0`, and on Linux your user must be in the `dialout` group
    flow, then click **Hold RH**. A PID moves the humid share of the flow to hit and stay at the picked RH.
    The line under the button reports the target it is holding and the humid share it asks for.
 5. **Experiment** tab: the step table has a column for every setpoint in the setup. Type the
-   steps yourself, or fill the table with the *Humidity cycle* form. Each step holds for its
-   time in minutes and sets the values in its row. An empty cell leaves that setpoint unchanged. **Start experiment** logs to
-   `experiment_HHMMSS.csv` and saves a PNG summary next to it when the experiment ends
-   or is stopped. Experiment name can be set and is added to file names. Anything
+   steps yourself, or fill the table with the *Humidity cycle* form. Each step sets the values
+   in its row and then holds for its time in minutes (*Hold*), or until its *Condition* is met.
+   An empty cell leaves that setpoint unchanged.
+   - A condition is an RH or temperature reading and the *Value* it should reach. It is met once
+     the reading has stayed within a tolerance of the value for a settle time (see `conditions`
+     below); leaving the tolerance band starts the settle time over.
+   - An RH condition runs the RH control loop with the MFCs, total flow and gains of the
+     **RH control** box, so leave the humid and dry flow cells of that row empty. The loop keeps
+     holding that RH in the following steps until a step sets those flows itself, picks another
+     RH condition, or the experiment ends. To reach 60 % RH and then hold it for 30 min, use two
+     rows: the condition, then a row with only a hold of 30.
+   - A temperature condition only waits. Set the chiller in its own column of the same row.
+   - With both a hold and a condition, the step ends at whichever comes first, so the hold
+     time is the longest the step may take.
+
+   **Start experiment** logs to `experiment_HHMMSS.csv` and saves a PNG summary next to it
+   when the experiment ends or is stopped. Experiment name can be set and is added to file names. Anything
    that is not a letter, digit, dash or underscore becomes an underscore, and the name is cut
    at 40 characters.
 
@@ -81,7 +95,8 @@ File → Open from setup catalog. The program reopens the last setup you used.
     {"name": "Cell RH", "temperature_from": "Julabo chiller", "dewpoint_from": "RH upstream", "calibrated": true}
   ],
   "rh_control": {"source": "RH downstream rh", "humid_mfc": "Humid MFC", "dry_mfc": "Dry MFC",
-                 "target": 60.0, "total_flow": 2.0, "kp": 1.0, "ki": 0.03, "kd": 0.0}
+                 "target": 60.0, "total_flow": 2.0, "kp": 1.0, "ki": 0.03, "kd": 0.0},
+  "conditions": {"rh_tolerance": 1.0, "temperature_tolerance": 0.2, "settle_minutes": 5.0}
 }
 ```
 
@@ -101,6 +116,9 @@ File → Open from setup catalog. The program reopens the last setup you used.
 - `rh_control`: what the RH control box starts with. The box writes back the source, the two
   MFCs, the target and the total flow, so they are there next time. The PID gains `kp`, `ki`
   and `kd` have no boxes in the window: retune a rig by editing them here.
+- `conditions`: when an experiment step's condition counts as met. The reading must stay within
+  `rh_tolerance` (in % RH) or `temperature_tolerance` (in °C) of the value for `settle_minutes`.
+  Like the PID gains, these are only edited here.
 - A relative `log_folder` is relative to the app folder.
 
 ## Device catalog
@@ -159,5 +177,5 @@ Bug reports, questions and new device drivers are welcome. See [CONTRIBUTING.md]
 
 ## Citation
 
-If you use ACME controller in your research, please cite it using [CITATION.cff](CITATION.cff)
+If you use ACME in your research, please cite it using [CITATION.cff](CITATION.cff)
 (GitHub's "Cite this repository" button).

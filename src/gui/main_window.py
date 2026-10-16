@@ -12,7 +12,7 @@ from src.devices import DEVICE_TYPES
 from src.gui.devices_dialog import SETUP_FOLDER, DevicesDialog, read_setup
 from src.gui.experiment_panel import ExperimentPanel, spin_box
 from src.gui.plot import LivePlot
-from src.worker import Worker, data_units
+from src.worker import Worker, data_units, rh_columns
 
 DEFAULT_SETUP = os.path.join("src", "setups", "humidity.json")
 
@@ -224,10 +224,7 @@ class MainWindow(QMainWindow):
     def rh_control_box(self, flow_devices):
         settings = self.setup["rh_control"]
         self.rh_source = QComboBox()
-        # Every RH-like column: a device's "rh" reading, or an RH worked out from a dew point.
-        computed = [entry["name"] for entry in self.setup["computed_rh"]]
-        self.rh_source.addItems([column for column in self.units
-                                 if column.endswith(" RH") or column in computed])
+        self.rh_source.addItems(rh_columns(self.setup))
         self.rh_source.setCurrentText(settings["source"])
         self.rh_humid = QComboBox()
         self.rh_humid.addItems(flow_devices)
@@ -322,7 +319,10 @@ class MainWindow(QMainWindow):
         self.control_group.setEnabled(not locked)
         self.control_group.setTitle("Manual control (locked during the experiment)" if locked else "Manual control")
         if self.rh_hold is not None:
+            # An edit here would reach the worker and switch off the RH loop of an RH condition.
             self.rh_hold.setEnabled(not locked)
+            self.rh_target.setEnabled(not locked)
+            self.rh_total.setEnabled(not locked)
 
     def connection_failed(self, text):
         if self.worker is None:
@@ -352,7 +352,7 @@ class MainWindow(QMainWindow):
         self.plot.add(row)
         self.experiment_panel.show_step(row["step"])
         self.lock_manual_control(row["step"] != "")
-        self.experiment_status.setText(self.experiment_panel.progress(row["step"], row.get("step end")))
+        self.experiment_status.setText(self.experiment_panel.progress(row))
         if self.rh_hold is not None:
             if row.get("RH control setpoint") is None:
                 self.rh_status.setText("off")

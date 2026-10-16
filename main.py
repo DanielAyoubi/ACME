@@ -12,7 +12,7 @@ def main():
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
     window = MainWindow()
-    window.setWindowTitle("ACME controller")
+    window.setWindowTitle("ACME")
     window.showMaximized()
     sys.exit(app.exec())
 

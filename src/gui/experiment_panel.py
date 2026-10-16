@@ -23,8 +23,10 @@ from PyQt6.QtWidgets import (
 
 from src.devices import DEVICE_TYPES
 from src.experiment import humidity_cycle
+from src.worker import data_units, rh_columns
 
 CURRENT_STEP_COLOR = QColor(222, 235, 250)
+FIRST_CONTROL_COLUMN = 3  # after Hold, Condition and Value
 
 
 def spin_box(minimum, maximum, value, suffix, step=1.0):
@@ -66,6 +68,7 @@ class ExperimentPanel(QWidget):
         self.controls = []  # (device name, control, unit), one table column each
         self.running = False
         self.steps = []  # the steps last sent to the worker, so edits to the table mid-run change nothing
+        self.settle_minutes = 0  # from the setup's "conditions", for the progress line
         self.highlighted_row = (
             None  # the row currently colored as the running step, or None
         )
@@ -137,7 +140,9 @@ class ExperimentPanel(QWidget):
         steps_layout = QVBoxLayout()
         steps_layout.addLayout(name_row)
         steps_layout.addWidget(
-            QLabel("Steps (an empty cell leaves that setpoint unchanged)")
+            QLabel("Steps: each holds for its time, or until its condition has settled at the value, "
+                   "whichever comes first.\nAn RH condition runs the RH control loop on its MFCs. "
+                   "An empty cell leaves that setpoint unchanged.")
         )
         steps_layout.addWidget(self.table)
         steps_layout.addLayout(table_buttons)
@@ -147,6 +152,7 @@ class ExperimentPanel(QWidget):
         layout.addLayout(steps_layout)
 
     def configure(self, setup):
+        self.settle_minutes = setup["conditions"]["settle_minutes"]
         self.controls = []
         choices = {}  # (device name, control) -> drop-down items, like ["", "1 closed", "2 nitrogen", "3 oxygen"]
         self.humid_mfc.clear()
@@ -166,10 +172,15 @@ class ExperimentPanel(QWidget):
         if self.dry_mfc.count() > 1:
             self.dry_mfc.setCurrentIndex(1)
 
+        # A condition can be any RH or temperature reading.
+        conditions = rh_columns(setup) + [column for column in data_units(setup)
+                                          if column.endswith(" temperature")]
+
         self.table.setRowCount(0)
-        self.table.setColumnCount(1 + len(self.controls))
-        headers = ["Hold (min)"]
-        for column, (name, control, unit) in enumerate(self.controls, start=1):
+        self.table.setColumnCount(FIRST_CONTROL_COLUMN + len(self.controls))
+        self.table.setItemDelegateForColumn(1, ChoiceDelegate([""] + conditions, self.table))
+        headers = ["Hold (min)", "Condition", "Value"]
+        for column, (name, control, unit) in enumerate(self.controls, start=FIRST_CONTROL_COLUMN):
             delegate = None  # a plain text cell
             if isinstance(unit, list):  # choices instead of a unit, like the valve positions
                 delegate = ChoiceDelegate(choices[(name, control)], self.table)
@@ -185,10 +196,10 @@ class ExperimentPanel(QWidget):
         self.table.blockSignals(True)
         row = self.table.rowCount()
         self.table.insertRow(row)
-        texts = [""] * (1 + len(self.controls))
+        texts = [""] * (FIRST_CONTROL_COLUMN + len(self.controls))
         if step:
             texts[0] = f"{step['minutes']:g}"
-            for column, (name, control, unit) in enumerate(self.controls, start=1):
+            for column, (name, control, unit) in enumerate(self.controls, start=FIRST_CONTROL_COLUMN):
                 if (name, control) in step["setpoints"]:
                     texts[column] = f"{step['setpoints'][(name, control)]:g}"
         for column, text in enumerate(texts):
@@ -258,21 +269,31 @@ class ExperimentPanel(QWidget):
     def steps_from_table(self):
         steps = []
         for row in range(self.table.rowCount()):
+            hold = self.table.item(row, 0).text().strip()
+            condition = self.table.item(row, 1).text()
+            value = self.table.item(row, 2).text().strip()
+            if not hold and not condition:
+                raise ValueError(f"Step {row + 1} needs a hold time, a condition, or both.")
+            if condition and not value:
+                raise ValueError(f"Step {row + 1}: give the value {condition} should settle at.")
+            if value and not condition:
+                raise ValueError(f"Step {row + 1} has a value but no condition.")
             try:
                 setpoints = {}
-                for column, (name, control, unit) in enumerate(self.controls, start=1):
+                for column, (name, control, unit) in enumerate(self.controls, start=FIRST_CONTROL_COLUMN):
                     text = self.table.item(row, column).text().strip()
                     if text:
                         setpoints[(name, control)] = float(text.split()[0])  # "2 nitrogen" is 2
                 steps.append(
                     {
-                        "minutes": float(self.table.item(row, 0).text()),
+                        "minutes": float(hold) if hold else None,
+                        "condition": (condition, float(value)) if condition else None,
                         "setpoints": setpoints,
                     }
                 )
             except ValueError:
                 raise ValueError(
-                    f"Step {row + 1} has a hold time or setpoint that is not a number."
+                    f"Step {row + 1} has a hold time, value or setpoint that is not a number."
                 )
             # Catch a mistyped valve position now, not hours into the experiment.
             for name, control, unit in self.controls:
@@ -284,12 +305,20 @@ class ExperimentPanel(QWidget):
 
     def update_summary(self):
         minutes = 0
+        conditions = 0
         for row in range(self.table.rowCount()):
+            # How long a step with a condition takes is only known once it has settled.
+            if self.table.item(row, 1).text():
+                conditions += 1
+                continue
             try:
                 minutes += float(self.table.item(row, 0).text())
             except ValueError:
                 pass
-        self.summary.setText(f"{self.table.rowCount()} steps, {hours_minutes(minutes)}")
+        text = f"{self.table.rowCount()} steps, {hours_minutes(minutes)}"
+        if conditions:
+            text += f" + {conditions} condition{'s' if conditions > 1 else ''}"
+        self.summary.setText(text)
 
     def start_or_stop(self):
         if self.running:
@@ -352,20 +381,44 @@ class ExperimentPanel(QWidget):
             f"{name} {control} {value:g} {units.get((name, control), '')}".strip()
             for (name, control), value in step["setpoints"].items()
         ]
+        if step["condition"] is not None:
+            column, target = step["condition"]
+            parts.append(f"{column} to {target:g}")
         return ", ".join(parts) or "no changes"
 
-    def progress(self, step, step_end):
-        if step == "" or step_end is None:
+    def progress(self, row):
+        step = row["step"]
+        if step == "":
             return ""
-        step_left = max(0.0, step_end - time.time())
+        current = self.steps[step - 1]
         later = self.steps[step:]  # the steps after the current one
-        total_left = step_left + 60 * sum(later_step["minutes"] for later_step in later)
-        ends = datetime.now() + timedelta(seconds=total_left)
+        parts = [f"Step {step}/{len(self.steps)}" + ("" if later else " (last)")]
+
+        if current["condition"] is not None:
+            column, target = current["condition"]
+            text = f"waiting for {column} to settle at {target:g}"
+            if row[column] is not None:
+                text += f" (now {row[column]:.1f})"
+            if row["settled since"] is not None:
+                settled = (time.time() - row["settled since"]) / 60
+                text += f", settled {hours_minutes(settled)} of {hours_minutes(self.settle_minutes)}"
+            parts.append(text)
+
+        step_left = None  # stays None for a step that only waits for its condition
+        if row["step end"] is not None:
+            step_left = max(0.0, row["step end"] - time.time())
         if later:
-            text = (
-                f"Step {step}/{len(self.steps)} · next in {hours_minutes(math.ceil(step_left / 60))}: "
-                f"step {step + 1}, {self.describe(later[0])}"
-            )
-        else:
-            text = f"Step {step}/{len(self.steps)} (last)"
-        return f"{text} · experiment ends in {hours_minutes(math.ceil(total_left / 60))} (at {ends:%H:%M})"
+            if step_left is None:
+                when = "once settled"
+            elif current["condition"] is not None:
+                when = f"at the latest in {hours_minutes(math.ceil(step_left / 60))}"
+            else:
+                when = f"in {hours_minutes(math.ceil(step_left / 60))}"
+            parts.append(f"next {when}: step {step + 1}, {self.describe(later[0])}")
+
+        # The end time is only known when no step from here on waits for a condition.
+        if step_left is not None and all(later_step["condition"] is None for later_step in [current] + later):
+            total_left = step_left + 60 * sum(later_step["minutes"] for later_step in later)
+            ends = datetime.now() + timedelta(seconds=total_left)
+            parts.append(f"experiment ends in {hours_minutes(math.ceil(total_left / 60))} (at {ends:%H:%M})")
+        return " · ".join(parts)
