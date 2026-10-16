@@ -1,6 +1,6 @@
-# Contributing to ACME controller
+# Contributing to ACME
 
-Thanks for helping out. ACME controller is developed in the Aerosol and Cloud Microphysics
+Thanks for helping out. ACME is developed in the Aerosol and Cloud Microphysics
 group at Aarhus University, but it is not tied to one field: drivers for any lab instrument and
 other contributions are welcome.
 

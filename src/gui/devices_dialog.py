@@ -34,6 +34,7 @@ def fill_setup_defaults(setup):
     setup.setdefault("computed_rh", [])
     setup.setdefault("rh_control", {"source": "", "humid_mfc": "", "dry_mfc": "", "target": 50.0,
                                     "total_flow": 2.0, "kp": 1.0, "ki": 0.03, "kd": 0.0})
+    setup.setdefault("conditions", {"rh_tolerance": 1.0, "temperature_tolerance": 0.2, "settle_minutes": 5.0})
     return setup
 
 
