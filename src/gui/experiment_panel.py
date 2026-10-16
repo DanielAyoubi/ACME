@@ -110,10 +110,13 @@ class ExperimentPanel(QWidget):
         name_row.addWidget(self.name)
 
         self.table = QTableWidget()
+        self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.itemChanged.connect(self.update_summary)
         add_button = QPushButton("Add step")
         add_button.clicked.connect(lambda: self.add_step())
-        remove_button = QPushButton("Remove step")
+        duplicate_button = QPushButton("Duplicate selected")
+        duplicate_button.clicked.connect(self.duplicate_steps)
+        remove_button = QPushButton("Remove selected")
         remove_button.clicked.connect(self.remove_step)
         clear_button = QPushButton("Clear")
         clear_button.clicked.connect(self.clear_steps)
@@ -124,6 +127,7 @@ class ExperimentPanel(QWidget):
 
         table_buttons = QHBoxLayout()
         table_buttons.addWidget(add_button)
+        table_buttons.addWidget(duplicate_button)
         table_buttons.addWidget(remove_button)
         table_buttons.addWidget(clear_button)
         table_buttons.addStretch()
@@ -192,10 +196,27 @@ class ExperimentPanel(QWidget):
         self.table.blockSignals(False)
         self.update_summary()
 
+    def duplicate_steps(self):
+        rows = sorted({index.row() for index in self.table.selectedIndexes()})
+        if not rows:
+            return
+        copies = [[self.table.item(row, column).text() for column in range(self.table.columnCount())]
+                  for row in rows]
+        # The copies go right below the selection, so a selected block repeats in order.
+        self.table.blockSignals(True)
+        for offset, texts in enumerate(copies, start=rows[-1] + 1):
+            self.table.insertRow(offset)
+            for column, text in enumerate(texts):
+                self.table.setItem(offset, column, QTableWidgetItem(text))
+        self.table.blockSignals(False)
+        self.update_summary()
+
     def remove_step(self):
-        if self.table.currentRow() >= 0:
-            self.table.removeRow(self.table.currentRow())
-            self.update_summary()
+        rows = {index.row() for index in self.table.selectedIndexes()}
+        # From the bottom up, so removing a row does not shift the ones still to remove.
+        for row in sorted(rows, reverse=True):
+            self.table.removeRow(row)
+        self.update_summary()
 
     def clear_steps(self):
         self.table.setRowCount(0)
@@ -311,14 +332,16 @@ class ExperimentPanel(QWidget):
             for column in range(self.table.columnCount()):
                 item = self.table.item(self.highlighted_row, column)
                 if item:
-                    item.setBackground(
-                        QBrush()
-                    )  # no brush, so the item falls back to its default background
+                    # No brush, so the item falls back to its default colors.
+                    item.setBackground(QBrush())
+                    item.setForeground(QBrush())
         if row is not None:
             for column in range(self.table.columnCount()):
                 item = self.table.item(row, column)
                 if item:
                     item.setBackground(CURRENT_STEP_COLOR)
+                    # Dark text, because in dark mode the default text is white on this light color.
+                    item.setForeground(QColor("black"))
         self.highlighted_row = row
 
     def describe(self, step):
