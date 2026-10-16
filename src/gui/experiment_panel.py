@@ -125,12 +125,14 @@ class ExperimentPanel(QWidget):
 
     def configure(self, setup):
         self.controls = []
+        names = {}  # (device name, control) -> names from the setup, like "closed, nitrogen, oxygen"
         self.humid_mfc.clear()
         self.dry_mfc.clear()
         for device in setup["devices"]:
             device_class = DEVICE_TYPES[device["type"]]
             for control, unit in device_class.controls.items():
                 self.controls.append((device["name"], control, unit))
+                names[(device["name"], control)] = device.get(f"{control}_names", "")
             if "flow" in device_class.controls:
                 self.humid_mfc.addItem(device["name"])
                 self.dry_mfc.addItem(device["name"])
@@ -143,6 +145,8 @@ class ExperimentPanel(QWidget):
         for name, control, unit in self.controls:
             if isinstance(unit, list):  # choices instead of a unit, like the valve positions
                 unit = "/".join(str(choice) for choice in unit)
+                if names[(name, control)]:
+                    unit += ": " + names[(name, control)]
             headers.append(f"{name} {control} ({unit})")
         self.table.setHorizontalHeaderLabels(headers)
         self.table.resizeColumnsToContents()  # the header names are the widest thing in a column

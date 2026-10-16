@@ -54,7 +54,9 @@ class Worker(QThread):
         self.devices = {}
         for device in setup["devices"]:
             device_class = DEVICE_TYPES[device["type"]]
-            self.devices[device["name"]] = device_class(**{key: device[key] for key in device_class.settings})
+            # A setup saved before a driver gained a setting gets that setting's default.
+            settings = {key: device.get(key, default) for key, default in device_class.settings.items()}
+            self.devices[device["name"]] = device_class(**settings)
         self.connected = set()
         self.last_attempt = {name: 0 for name in self.devices}
 

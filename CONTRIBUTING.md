@@ -6,7 +6,7 @@ other contributions are welcome.
 
 ## Reporting a bug or asking for help
 
-Open an issue at https://github.com/DanielAyoubi/ACME-controller/issues. Please include:
+Open an issue at https://github.com/DanielAyoubi/ACME/issues. Please include:
 
 - what you did and what happened instead,
 - the device types involved and your setup JSON (from `src/setups/`), with anything private removed,

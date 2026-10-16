@@ -166,10 +166,12 @@ class MainWindow(QMainWindow):
                 # A list of choices instead of a unit, like the valve positions, gets a drop-down.
                 if isinstance(unit, list):
                     value_box = QComboBox()
-                    value_box.addItems([str(choice) for choice in unit])
+                    # Names from the setup are added after the numbers: "1 closed", "2 nitrogen", …
+                    names = device.get(f"{control}_names", "").split(",") + [""] * len(unit)
+                    value_box.addItems([f"{choice} {name.strip()}".strip() for choice, name in zip(unit, names)])
                     set_button.clicked.connect(
                         lambda checked, name=device["name"], control=control, box=value_box:
-                        self.send(("set", name, control, float(box.currentText()))))
+                        self.send(("set", name, control, float(box.currentText().split()[0]))))
                 else:
                     value_box = QDoubleSpinBox()
                     value_box.setRange(-1000, 10000)

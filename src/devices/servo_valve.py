@@ -7,12 +7,13 @@ import serial
 
 class ServoValve:
     label = "Servo Valve"
-    settings = {"port": "", "baudrate": 115200}
+    settings = {"port": "", "baudrate": 115200, "position_names": ""}
     readings = {"position": ""}
     controls = {"position": [1, 2, 3]}
     safe_state = {"position": 1}  # closed
 
-    def __init__(self, port, baudrate=115200, timeout=0.5):
+    # position_names, such as "closed, nitrogen, oxygen", is only shown in the window.
+    def __init__(self, port, baudrate=115200, position_names="", timeout=0.5):
         self.port = port
         self.baudrate = baudrate
         self.timeout = timeout

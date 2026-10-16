@@ -85,7 +85,7 @@ class DevicesDialog(QDialog):
                     self.setting_names.append(key)
 
         self.table = QTableWidget(0, 2 + len(self.setting_names))
-        self.table.setHorizontalHeaderLabels(["Name", "Type"] + [key.capitalize() for key in self.setting_names])
+        self.table.setHorizontalHeaderLabels(["Name", "Type"] + [key.replace("_", " ").capitalize() for key in self.setting_names])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.table.itemChanged.connect(self.refresh_rh_sources)
 
