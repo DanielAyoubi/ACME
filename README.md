@@ -86,9 +86,10 @@ File → Open from setup catalog. The program reopens the last setup you used.
 ```
 
 - A device's `name` must be unique. It prefixes its columns, e.g. `Humid MFC flow`.
-- `position_names` (servo valve, optional): names for positions 1, 2 and 3, such as
-  `"closed, nitrogen, oxygen"`. They are shown next to the numbers in manual control and the
-  experiment table header; the table and the CSV still use the numbers.
+- `position_names` (servo valve, optional): name a position by typing after its number in the
+  Manual control drop-down and pressing Enter. The names, such as `"closed, nitrogen, oxygen"`,
+  are saved here. In the experiment table the valve column is a drop-down of the same positions
+  (blank leaves the valve where it is); the CSV logs the numbers.
 - `computed_rh`: any number of RH columns worked out from two devices you already have —
   one that measures temperature (for example the Julabo's external probe) and one that
   measures dew point. Each entry adds one column under its own `name`, from the Magnus

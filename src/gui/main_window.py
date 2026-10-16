@@ -169,9 +169,15 @@ class MainWindow(QMainWindow):
                     # Names from the setup are added after the numbers: "1 closed", "2 nitrogen", …
                     names = device.get(f"{control}_names", "").split(",") + [""] * len(unit)
                     value_box.addItems([f"{choice} {name.strip()}".strip() for choice, name in zip(unit, names)])
+                    # Typing a name after the number and pressing Enter renames that position.
+                    value_box.setEditable(True)
+                    value_box.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+                    value_box.lineEdit().returnPressed.connect(
+                        lambda device=device, control=control, unit=unit, box=value_box:
+                        self.rename_choice(device, control, unit, box))
                     set_button.clicked.connect(
-                        lambda checked, name=device["name"], control=control, box=value_box:
-                        self.send(("set", name, control, float(box.currentText().split()[0]))))
+                        lambda checked, name=device["name"], control=control, unit=unit, box=value_box:
+                        self.send(("set", name, control, unit[box.currentIndex()])))
                 else:
                     value_box = QDoubleSpinBox()
                     value_box.setRange(-1000, 10000)
@@ -203,6 +209,14 @@ class MainWindow(QMainWindow):
         self.body.setSizes([width, max(width, self.body.width() - width)])
         self.plot.configure(self.units)
         self.experiment_panel.configure(self.setup)
+
+    def rename_choice(self, device, control, unit, box):
+        index = box.currentIndex()
+        name = box.currentText().strip().removeprefix(str(unit[index])).strip()
+        box.setItemText(index, f"{unit[index]} {name}".strip())
+        names = [box.itemText(i).removeprefix(str(choice)).strip() for i, choice in enumerate(unit)]
+        device[f"{control}_names"] = ", ".join(names) if any(names) else ""
+        self.save_setup()
 
     def column_dragged(self, position, index):
         self.column_width = position

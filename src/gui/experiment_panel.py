@@ -14,6 +14,7 @@ from PyQt6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QSpinBox,
+    QStyledItemDelegate,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -38,6 +39,24 @@ def spin_box(minimum, maximum, value, suffix, step=1.0):
 def hours_minutes(minutes):
     hours, minutes = divmod(round(minutes), 60)
     return f"{hours} h {minutes} min" if hours else f"{minutes} min"
+
+
+# Edits a step table cell with a drop-down of fixed choices, like the valve positions.
+class ChoiceDelegate(QStyledItemDelegate):
+    def __init__(self, choices, parent):
+        super().__init__(parent)
+        self.choices = choices
+
+    def createEditor(self, parent, option, index):
+        box = QComboBox(parent)
+        box.addItems(self.choices)
+        return box
+
+    def setEditorData(self, editor, index):
+        editor.setCurrentText(index.data())
+
+    def setModelData(self, editor, model, index):
+        model.setData(index, editor.currentText())
 
 
 class ExperimentPanel(QWidget):
@@ -125,14 +144,18 @@ class ExperimentPanel(QWidget):
 
     def configure(self, setup):
         self.controls = []
-        names = {}  # (device name, control) -> names from the setup, like "closed, nitrogen, oxygen"
+        choices = {}  # (device name, control) -> drop-down items, like ["", "1 closed", "2 nitrogen", "3 oxygen"]
         self.humid_mfc.clear()
         self.dry_mfc.clear()
         for device in setup["devices"]:
             device_class = DEVICE_TYPES[device["type"]]
             for control, unit in device_class.controls.items():
                 self.controls.append((device["name"], control, unit))
-                names[(device["name"], control)] = device.get(f"{control}_names", "")
+                if isinstance(unit, list):
+                    # Names from the setup are added after the numbers; "" leaves the setpoint unchanged.
+                    names = device.get(f"{control}_names", "").split(",") + [""] * len(unit)
+                    choices[(device["name"], control)] = [""] + [
+                        f"{choice} {name.strip()}".strip() for choice, name in zip(unit, names)]
             if "flow" in device_class.controls:
                 self.humid_mfc.addItem(device["name"])
                 self.dry_mfc.addItem(device["name"])
@@ -142,11 +165,12 @@ class ExperimentPanel(QWidget):
         self.table.setRowCount(0)
         self.table.setColumnCount(1 + len(self.controls))
         headers = ["Hold (min)"]
-        for name, control, unit in self.controls:
+        for column, (name, control, unit) in enumerate(self.controls, start=1):
+            delegate = None  # a plain text cell
             if isinstance(unit, list):  # choices instead of a unit, like the valve positions
+                delegate = ChoiceDelegate(choices[(name, control)], self.table)
                 unit = "/".join(str(choice) for choice in unit)
-                if names[(name, control)]:
-                    unit += ": " + names[(name, control)]
+            self.table.setItemDelegateForColumn(column, delegate)
             headers.append(f"{name} {control} ({unit})")
         self.table.setHorizontalHeaderLabels(headers)
         self.table.resizeColumnsToContents()  # the header names are the widest thing in a column
@@ -218,7 +242,7 @@ class ExperimentPanel(QWidget):
                 for column, (name, control, unit) in enumerate(self.controls, start=1):
                     text = self.table.item(row, column).text().strip()
                     if text:
-                        setpoints[(name, control)] = float(text)
+                        setpoints[(name, control)] = float(text.split()[0])  # "2 nitrogen" is 2
                 steps.append(
                     {
                         "minutes": float(self.table.item(row, 0).text()),

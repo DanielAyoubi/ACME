@@ -212,6 +212,8 @@ class DevicesDialog(QDialog):
         self.table.setItem(row, 0, QTableWidgetItem(device["name"]))
         type_item = QTableWidgetItem(device_class.label)
         type_item.setData(Qt.ItemDataRole.UserRole, device["type"])
+        # The whole device, so keys without a column (like valve position names) survive a save.
+        type_item.setData(Qt.ItemDataRole.UserRole + 1, device)
         type_item.setFlags(Qt.ItemFlag.ItemIsEnabled)
         self.table.setItem(row, 1, type_item)
 
@@ -246,7 +248,8 @@ class DevicesDialog(QDialog):
         devices = []
         for row in range(self.table.rowCount()):
             type_key = self.table.item(row, 1).data(Qt.ItemDataRole.UserRole)
-            device = {"name": self.table.item(row, 0).text().strip(), "type": type_key}
+            device = {**self.table.item(row, 1).data(Qt.ItemDataRole.UserRole + 1),
+                      "name": self.table.item(row, 0).text().strip(), "type": type_key}
             for column, key in enumerate(self.setting_names, start=2):
                 editor = self.table.cellWidget(row, column)
                 if editor is None:

@@ -38,7 +38,8 @@
       "name": "Valve",
       "type": "servo_valve",
       "port": "COM28",
-      "baudrate": 115200
+      "baudrate": 115200,
+      "position_names": "Closed, Oxygen, Nitrogen"
     }
   ],
   "computed_rh": [
