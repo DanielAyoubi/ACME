@@ -1,14 +1,31 @@
-<p align="center">
-  <img src="docs/logo.svg" alt="ACME - Aerosol and Cloud Microphysics Experiments" width="520">
-</p>
-
 # ACME controller
 
-ACME (Aerosol and Cloud Microphysics Experiments) is a small PyQt6 app to run lab
-instruments (mass flow controllers, RH probes, chillers, O₂ meters, …) and to script
-simple experiments such as humidity cycles.
+[![tests](https://github.com/DanielAyoubi/ACME-controller/actions/workflows/tests.yml/badge.svg)](https://github.com/DanielAyoubi/ACME-controller/actions/workflows/tests.yml)
+
+ACME (Automated Control and Monitoring of Experiments) is an open-source PyQt6 application
+that runs every instrument in an experimental setup from one window. It logs each reading to a
+clean CSV file and plots it in real time. It also runs scripted experiments that change
+setpoints on a schedule, so a run that needs changes over hours or days carries on without
+someone at the bench.
+
+- **Many devices, one window.** Mass flow controllers, RH probes, chillers, O₂ meters, valves, …
+  are listed in one JSON setup file, and a serial port scan finds them for you.
+- **Clean logging and live display.** Every reading goes to one timestamped CSV file and to a
+  live plot with one panel per unit.
+- **Unattended, prolonged experiments.** A step table sets the setpoints of any device and holds
+  each step for its time, for as many steps and days as you need. A PNG summary is saved at the end.
+- **Built for long runs.** A device that stops answering is retried every 10 s. When an
+  experiment finishes, or the app disconnects or closes, every device returns to its base
+  state: MFCs to zero flow, the valve to closed, and so on.
+- **Easy to extend.** A new instrument is one small Python file and one line in the device list.
+  The GUI, plot, CSV and experiment table pick it up automatically.
+- **Built-in humidity tools.** PID control of RH by splitting a flow between a humid and a dry
+  MFC, a humidity-cycle generator and RH computed from a dew point: a ready-made example of an
+  experiment built on the general core.
 
 ## Run
+
+Needs Python 3.10 or newer. On Windows:
 
 ```
 git clone https://github.com/DanielAyoubi/ACME-controller.git
@@ -18,21 +35,25 @@ python -m venv .venv
 .venv\Scripts\python main.py
 ```
 
+On Linux or macOS, use `.venv/bin/pip` and `.venv/bin/python` instead. Serial ports are then
+named like `/dev/ttyUSB0`, and on Linux your user must be in the `dialout` group to open them.
+
 ## Using it
 
 1. **Devices…** lists the devices in the current setup. Add a device, pick its COM port,
-   or click **Detect devices…** to scan the serial ports. A quick scan tries default and
-   already-used addresses. A deep scan also sweeps Modbus addresses 1–247.
+   or click **Detect devices…** to scan the serial ports. All ports are scanned at the same
+   time. A quick scan tries each device type's default address and the addresses the setup
+   already uses for that type. A deep scan also sweeps Modbus addresses 1–247.
 2. **Connect** starts polling. Every reading goes to the plot, to *Latest readings* and to
    a CSV file in the log folder: `data/YYYY-MM-DD/monitor_HHMMSS.csv`.
 3. **Manual control** has a row for each setpoint a device accepts (MFC flow, chiller
    temperature, …).
-4. **RH control** Pick the RH reading to follow, which MFC carries the humid air and which the dry, a target and a total
+4. **RH control** (built-in humidity tool): pick the RH reading to follow, which MFC carries the humid air and which the dry, a target and a total
    flow, then click **Hold RH**. A PID moves the humid share of the flow to hit and stay at the picked RH.
    The line under the button reports the target it is holding and the humid share it asks for.
-5. **Experiment** tab: fill the step table with the *Humidity cycle* form, or type steps
-   yourself. Each step holds for its time in minutes and sets the values in its row. An
-   empty cell leaves that setpoint unchanged. **Start experiment** logs to
+5. **Experiment** tab: the step table has a column for every setpoint in the setup. Type the
+   steps yourself, or fill the table with the *Humidity cycle* form. Each step holds for its
+   time in minutes and sets the values in its row. An empty cell leaves that setpoint unchanged. **Start experiment** logs to
    `experiment_HHMMSS.csv` and saves a PNG summary next to it when the experiment ends
    or is stopped. Experiment name can be set and is added to file names. Anything
    that is not a letter, digit, dash or underscore becomes an underscore, and the name is cut
@@ -42,7 +63,6 @@ In the humidity cycle, the *humid share* is the percentage of the total flow sen
 through the humid MFC. The dry MFC supplies the rest. With a saturating bubbler this
 share is roughly the RH.
 
-**Disconnect** (or closing the app) sets all MFC flows to 0.
 
 ## Setup catalog
 
@@ -84,6 +104,7 @@ File → Open from setup catalog. The program reopens the last setup you used.
 | type | device | readings | setpoints |
 |------|--------|----------|-----------|
 | `vogtlin_mfc` | Vögtlin MFC, Modbus RTU | flow, setpoint | flow |
+| `brooks_mfc` | Brooks 5850S analog MFC, Arduino | flow, setpoint | flow |
 | `vaisala_rh` | Vaisala HMP110, Modbus RTU | rh, temperature, dewpoint | – |
 | `dewmaster` | EdgeTech DewMaster, serial | rh, temperature, dewpoint | – |
 | `julabo_chiller` | Julabo chiller, serial | temperature (external probe), setpoint | temperature |
@@ -100,6 +121,7 @@ File → Open from setup catalog. The program reopens the last setup you used.
        settings = {"port": "", "baudrate": 9600}      # connection settings and their defaults
        readings = {"pressure": "mbar"}                # what read() returns, and the units
        controls = {"pressure": "mbar"}                # what set() accepts ({} if nothing)
+       safe_state = {"pressure": 1013.0}              # set when the app lets go ({} to leave as is)
 
        def __init__(self, port, baudrate=9600): ...
        def connect(self): ...          # open the port and prove the device answers; raise if not
@@ -117,3 +139,21 @@ automatically. Readings with a new unit get their own plot panel; a reading with
 instead of a unit, such as `{"position": [1, 2, 3]}`, gets a drop-down. A device with an
 `address` setting (Modbus) must also accept a `timeout` argument, because the scan passes
 a short one to sweep addresses quickly.
+
+## Tests
+
+The tests cover the humidity, PID, experiment and driver logic and need no hardware:
+
+```
+pip install -r requirements.txt pytest
+pytest
+```
+
+## Contributing
+
+Bug reports, questions and new device drivers are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Citation
+
+If you use ACME controller in your research, please cite it using [CITATION.cff](CITATION.cff)
+(GitHub's "Cite this repository" button).

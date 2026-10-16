@@ -110,15 +110,9 @@ class Worker(QThread):
         if self.steps:
             self.stop_experiment("Experiment stopped by disconnect.")
         self.close_log()
+        self.go_to_safe_state()
         for name in self.connected:
-            device = self.devices[name]
-            # Stop the gas when the app lets go of an MFC.
-            if "flow" in device.controls:
-                try:
-                    device.set("flow", 0.0)
-                except Exception as error:
-                    self.message.emit(f"{name}: could not set the flow to 0 ({error})")
-            device.disconnect()
+            self.devices[name].disconnect()
         self.message.emit("Disconnected.")
 
     def poll(self):
@@ -183,6 +177,14 @@ class Worker(QThread):
             self.message.emit(f"{name} {control} set to {value}")
         except Exception as error:
             self.message.emit(f"Cannot set {name} {control}: {error}")
+
+    def go_to_safe_state(self):
+        for name in self.connected:
+            for control, value in self.devices[name].safe_state.items():
+                try:
+                    self.devices[name].set(control, value)
+                except Exception as error:
+                    self.message.emit(f"{name}: could not set {control} to {value:g} ({error})")
 
     def set_rh_control(self, settings, on):
         self.rh = settings
@@ -267,13 +269,7 @@ class Worker(QThread):
     def next_step(self):
         self.step_index += 1
         if self.step_index == len(self.steps):
-            # set flows to 0 when experiment finishes
-            for name, device in self.devices.items():
-                if "flow" in device.controls:
-                    try:
-                        device.set("flow", 0.0)
-                    except Exception as error:
-                        self.message.emit(f"{name}: could not set the flow to 0 ({error})")
+            self.go_to_safe_state()
             self.stop_experiment("Experiment finished.")
             return
         step = self.steps[self.step_index]

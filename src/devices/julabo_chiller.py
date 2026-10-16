@@ -8,6 +8,8 @@ class JulaboChiller:
     settings = {"port": "", "baudrate": 9600}
     readings = {"temperature": "°C", "setpoint": "°C"}
     controls = {"temperature": "°C"}
+    # Left at its setpoint: a jump in temperature could harm the sample.
+    safe_state = {}
 
     def __init__(self, port, baudrate=9600, timeout=1.0):
         self.port = port

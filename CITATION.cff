@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "If you use ACME controller in your research, please cite it as below."
+title: "ACME controller"
+abstract: "ACME (Automated Control and Monitoring of Experiments): an open-source PyQt6 application that controls the instruments of an experimental setup, logs and plots their readings in real time, and runs scheduled multi-step experiments unattended."
+type: software
+authors:
+  - given-names: Daniel
+    family-names: Ayoubi
+    affiliation: Aarhus University
+    orcid: "https://orcid.org/0000-0003-1972-6285"
+  - given-names: Fabian
+    family-names: Mahrt
+    affiliation: Aarhus University
+    orcid: "https://orcid.org/0000-0002-7059-6765"
+repository-code: "https://github.com/DanielAyoubi/ACME-controller"
+license: MIT
+version: 1.0.0
+date-released: "2026-30-06"

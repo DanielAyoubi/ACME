@@ -10,6 +10,7 @@ class FireStingO2:
     settings = {"port": "", "baudrate": 19200}
     readings = {"oxygen": "%"}
     controls = {}
+    safe_state = {}
 
     def __init__(self, port, baudrate=19200, timeout=4.0):
         self.port = port

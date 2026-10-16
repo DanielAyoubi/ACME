@@ -8,11 +8,13 @@ from src.devices.vogtlin_mfc import VogtlinMFC
 
 # The device catalog: every device type the app knows.
 # The scan tries them in this order, so keep the quick-to-probe ones first.
+# The servo valve goes first: every other probe opens the port the usual way, which resets
+# the valve's Arduino and swings the valve, and the Arduino then misses its own probe while booting.
 DEVICE_TYPES = {
+    "servo_valve": ServoValve,
     "vogtlin_mfc": VogtlinMFC,
     "vaisala_rh": VaisalaRH,
     "brooks_mfc": BrooksMFC,
-    "servo_valve": ServoValve,
     "julabo_chiller": JulaboChiller,
     "firesting_o2": FireStingO2,
     "dewmaster": DewMaster,

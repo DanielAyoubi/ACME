@@ -13,6 +13,7 @@ class VogtlinMFC:
     settings = {"port": "", "baudrate": 9600, "address": 1}
     readings = {"flow": "L/min", "setpoint": "L/min"}
     controls = {"flow": "L/min"}
+    safe_state = {"flow": 0.0}  # what the app sets when it lets go of the device
 
     def __init__(self, port, baudrate=9600, address=1, timeout=0.5):
         self.port = port

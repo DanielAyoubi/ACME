@@ -52,24 +52,25 @@ def logo_widget(ratio):
 
 
 class ScanWorker(QThread):
-    progress = pyqtSignal(int, str)
+    progress = pyqtSignal(str, str)  # port, what the scan is doing there
     done = pyqtSignal(list, bool)  # found devices, cancelled
 
-    def __init__(self, ports, deep, known_addresses):
+    def __init__(self, ports, deep, known_devices):
         super().__init__()
         self.ports = ports
         self.deep = deep
-        self.known_addresses = known_addresses
+        self.known_devices = known_devices
         self.cancelled = False
 
     def run(self):
-        found = scan(self.ports, self.deep, self.known_addresses, self.on_progress)
+        found = scan(self.ports, self.deep, self.known_devices, self.on_progress)
         self.done.emit(found, self.cancelled)
 
-    def on_progress(self, port_number, text):
+    # Called from one thread per port at the same time; the signal carries it to the GUI thread.
+    def on_progress(self, port, text):
         if self.cancelled:
             return False
-        self.progress.emit(port_number, text)
+        self.progress.emit(port, text)
         return True
 
     def cancel(self):
@@ -87,6 +88,7 @@ class DevicesDialog(QDialog):
         self.ports = [port.device for port in list_ports.comports()]
         self.scan_worker = None
         self.scan_progress = None
+        self.scan_status = {}  # port -> what the scan is doing there, or what it found
 
         # One column per connection setting used by any device type, so a new driver
         # with a new setting shows up here without changing this dialog.
@@ -343,7 +345,8 @@ class DevicesDialog(QDialog):
         return self.table.cellWidget(row, self.setting_names.index("port") + 2)
 
     def detect_devices(self):
-        choices = ["Quick: default and already used addresses", "Deep: all Modbus addresses (minutes per port)"]
+        choices = ["Quick: default and already used addresses",
+                   "Deep: also sweep Modbus addresses 1-247 (a couple of minutes)"]
         choice, ok = QInputDialog.getItem(self, "Detect devices", "Scan type:", choices, 0, False)
         if not ok:
             return
@@ -358,9 +361,10 @@ class DevicesDialog(QDialog):
                 if editor.findText(port) < 0:
                     editor.addItem(port)
 
-        known_addresses = [device["address"] for device in self.devices_from_table() if "address" in device]
-        self.scan_worker = ScanWorker(self.ports, choice.startswith("Deep"), known_addresses)
-        self.scan_progress = QProgressDialog("Scanning…", "Cancel", 0, len(self.ports), self)
+        self.scan_status = {port: "waiting" for port in self.ports}
+        self.scan_worker = ScanWorker(self.ports, choice.startswith("Deep"), self.devices_from_table())
+        # The ports are scanned side by side, so the bar just shows it is busy and the label has a line per port.
+        self.scan_progress = QProgressDialog("Scanning…", "Cancel", 0, 0, self)
         self.scan_progress.setWindowTitle("Detect devices")
         self.scan_progress.setWindowModality(Qt.WindowModality.WindowModal)
         self.scan_progress.setMinimumDuration(0)
@@ -371,12 +375,12 @@ class DevicesDialog(QDialog):
         self.ok_button.setEnabled(False)
         self.scan_worker.start()
 
-    def scan_progressed(self, port_number, text):
+    def scan_progressed(self, port, text):
         # A progress signal already queued when Cancel was pressed would show the dialog again.
         if self.scan_worker is None or self.scan_worker.cancelled:
             return
-        self.scan_progress.setValue(port_number)
-        self.scan_progress.setLabelText(text)
+        self.scan_status[port] = text
+        self.scan_progress.setLabelText("\n".join(f"{name}: {status}" for name, status in self.scan_status.items()))
 
     def cancel_scan(self):
         # The probe in progress still has to time out, which can take a few seconds.
@@ -437,10 +441,11 @@ class DevicesDialog(QDialog):
             header = f"Scan cancelled. Found {len(found)} device(s) before stopping."
         else:
             header = f"Found {len(found)} device(s)."
+            # The last status of an empty port says why: nothing answered, or the port would not open.
             found_ports = {device["port"] for device in found}
-            empty_ports = [port for port in self.ports if port not in found_ports]
-            if empty_ports:
-                lines.append(f"Nothing recognised on: {', '.join(empty_ports)}")
+            for port in self.ports:
+                if port not in found_ports:
+                    lines.append(f"{port}  {self.scan_status[port]}")
         QMessageBox.information(self, "Detect devices", "\n".join([header, ""] + lines) if lines else header)
 
     def reject(self):

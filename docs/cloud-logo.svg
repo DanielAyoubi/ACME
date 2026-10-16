@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="520" height="140" viewBox="0 0 520 140">
-  <title>ACME - Aerosol and Cloud Microphysics Experiments</title>
+  <title>ACME - Automated Control and Monitoring of Experiments</title>
   <style>
     .name { fill: #1f2937; }
     .tagline { fill: #4b5563; }
@@ -34,5 +34,5 @@
 
   <text x="148" y="82" class="name" font-family="Segoe UI, Helvetica, Arial, sans-serif"
         font-size="64" font-weight="700" letter-spacing="6">ACME</text>
-  <text x="150" y="112" class="tagline" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="17"><tspan class="initial">A</tspan>erosol and <tspan class="initial">C</tspan>loud <tspan class="initial">M</tspan>icrophysics <tspan class="initial">E</tspan>xperiments</text>
+  <text x="150" y="112" class="tagline" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="15"><tspan class="initial">A</tspan>utomated <tspan class="initial">C</tspan>ontrol and <tspan class="initial">M</tspan>onitoring of <tspan class="initial">E</tspan>xperiments</text>
 </svg>

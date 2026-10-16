@@ -9,6 +9,7 @@ class VaisalaRH:
     settings = {"port": "", "baudrate": 19200, "address": 240}
     readings = {"RH": "%", "temperature": "°C", "dewpoint": "°C"}
     controls = {}
+    safe_state = {}
 
     def __init__(self, port, baudrate=19200, address=240, timeout=1.0):
         self.port = port
@@ -19,8 +20,9 @@ class VaisalaRH:
 
     def connect(self):
         self.disconnect()
+        retries = 1 if self.timeout >= 0.5 else 0
         self.client = ModbusSerialClient(port=self.port, baudrate=self.baudrate, bytesize=8, parity="N",
-                                         stopbits=2, timeout=self.timeout, retries=1)
+                                         stopbits=2, timeout=self.timeout, retries=retries)
         if not self.client.connect():
             self.client = None
             raise IOError(f"Cannot open {self.port}")

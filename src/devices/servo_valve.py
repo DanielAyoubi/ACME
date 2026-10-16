@@ -6,10 +6,11 @@ import serial
 
 
 class ServoValve:
-    label = "Swagelok servo valve (Arduino)"
+    label = "Servo Valve"
     settings = {"port": "", "baudrate": 115200}
     readings = {"position": ""}
     controls = {"position": [1, 2, 3]}
+    safe_state = {"position": 1}  # closed
 
     def __init__(self, port, baudrate=115200, timeout=0.5):
         self.port = port

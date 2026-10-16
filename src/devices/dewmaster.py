@@ -15,6 +15,7 @@ class DewMaster:
     settings = {"port": "", "baudrate": 19200}
     readings = {"RH": "%", "temperature": "°C", "dewpoint": "°C"}
     controls = {}
+    safe_state = {}
 
     def __init__(self, port, baudrate=19200, timeout=5.0):
         self.port = port
